@@ -1,193 +1,204 @@
 
-# outlier_indices: 5 15 28 69 87 93 106 110 112 116 122 125
-fas_cleaned <- fas3[-c(5, 15, 28, 69, 87, 93, 106, 110, 112, 116, 122, 125), ]
+> set.seed(123)
+> # --- Cross-Validation Setup ---
+> train_ctrl <- trainControl(method = "cv", number = 10, savePredictions = "final")
+> 
+> # 1. SVM (Radial) - sigma: 0.001-0.1, C: 1-100
+> svm_grid <- expand.grid(sigma = c(0.001, 0.01, 0.1), C = c(1, 10, 50, 100))
+> model_svm <- train(x100_seed_weight ~ ., data = train_scaled, method = "svmRadial",
++                    trControl = train_ctrl, tuneGrid = svm_grid)
+> 
+> # 2. ANN (nnet) - size: 3-10, decay: 0.1-0.001
+> ann_grid <- expand.grid(size = seq(3, 10, by = 2), decay = c(0.1, 0.01, 0.001))
+> model_ann <- train(x100_seed_weight ~ ., data = train_scaled, method = "nnet",
++                    trControl = train_ctrl, tuneGrid = ann_grid, linout = TRUE, trace = FALSE)
+> 
+> # 3. Random Forest (RF) - mtry: 4, 8, 12, 16, ntree: 1000
+> rf_grid <- expand.grid(mtry = c(4, 8, 12, 16))
+> model_rf <- train(x100_seed_weight ~ ., data = train_scaled, method = "rf",
++                   trControl = train_ctrl, tuneGrid = rf_grid, ntree = 1000)
+> 
+> # 4. XGBoost - nrounds: 500-1000, depth: 4-8, eta: 0.01-0.05
+> xgb_grid <- expand.grid(nrounds = c(500, 1000), max_depth = c(4, 6, 8),
++                         eta = c(0.01, 0.05), gamma = 0, colsample_bytree = 0.8,
++                         min_child_weight = 1, subsample = 0.8)
+> model_xgb <- train(x100_seed_weight ~ ., data = train_scaled, method = "xgbTree",
++                    trControl = train_ctrl, tuneGrid = xgb_grid)
+
+> 
+> # 5. GBM - depth: 3-7, shrinkage: 0.01-0.05
+> gbm_grid <- expand.grid(interaction.depth = c(3, 5, 7), n.trees = c(100, 500),
++                         shrinkage = c(0.01, 0.05), n.minobsinnode = 10)
+> model_gbm <- train(x100_seed_weight ~ ., data = train_scaled, method = "gbm",
++                    trControl = train_ctrl, tuneGrid = gbm_grid, verbose = FALSE)
+> # 6. LightGBM - num_leaves: 15-31, learning_rate: 0.05
+> # Matris formatına hazırlık
+> dtrain_lgb <- lgb.Dataset(data = as.matrix(train_scaled[,-which(names(train_scaled)=="x100_seed_weight")]), 
++                           label = train_scaled$x100_seed_weight)
+> 
+> lgb_params <- list(objective = "regression", metric = "rmse", 
++                    learning_rate = 0.05, num_leaves = 31, min_data_in_leaf = 10)
+> 
+> model_lgbm <- lgb.train(params = lgb_params, data = dtrain_lgb, nrounds = 100, verbose = -1)
+> # Metrikleri hesaplayan fonksiyon
+> get_metrics <- function(model, test_data, target_col) {
++   preds <- predict(model, test_data)
++   actual <- test_data[[target_col]]
++   
++   r2 <- cor(actual, preds)^2
++   rmse <- sqrt(mean((actual - preds)^2))
++   mae <- mean(abs(actual - preds))
++   
++   return(c(R2 = r2, RMSE = rmse, MAE = mae))
++ }
+> 
+> # Modellerin Test Seti Performansı
+> results_table <- data.frame(
++   SVM = get_metrics(model_svm, test_scaled, "x100_seed_weight"),
++   ANN = get_metrics(model_ann, test_scaled, "x100_seed_weight"),
++   RF  = get_metrics(model_rf, test_scaled, "x100_seed_weight"),
++   XGB = get_metrics(model_xgb, test_scaled, "x100_seed_weight"),
++   GBM = get_metrics(model_gbm, test_scaled, "x100_seed_weight")
++ )
+> 
+> print(t(results_table))
 
 
+# --- Stage 4.3: Statistical Significance (Bonferroni) ---
 
-fas_ready_for_scale <- fas_cleaned %>%
-  select(-`Number of internodes`)
-
-
-cat("Remaining observations:", nrow(fas_ready_for_scale), "\n")
-cat("Remaining predictors:", ncol(fas_ready_for_scale) - 1, "\n")
+diffs <- diff(comparison)
 
 
-
-set.seed(42) 
-index <- createDataPartition(fas_ready_for_scale$`100 seed weight`, p = 0.8, list = FALSE)
-
-train_data <- fas_ready_for_scale[index, ]
-test_data  <- fas_ready_for_scale[-index, ]
-
-# 2. Normalizasyon (Scaling)
+bonferroni_summary <- summary(diffs, adjustment = "bonferroni")
+print(bonferroni_summary)
 
 
-params <- preProcess(train_data, method = c("center", "scale"))
-
-
-train_scaled <- predict(params, train_data)
-test_scaled  <- predict(params, test_data)
-
-
-library(caret)
-
-# 1. Kontrol Ayarları (10-katlı Çapraz Doğrulama)
-ctrl <- trainControl(method = "cv", number = 10)
-
-# 2. ANN (Yapay Sinir Ağları) Eğitimi
-set.seed(123)
-ann_fit <- train(`100 seed weight` ~ ., data = train_scaled, 
-                 method = "nnet", 
-                 linout = TRUE, 
-                 trace = FALSE, 
-                 trControl = ctrl,
-                 tuneGrid = expand.grid(size = c(1, 3, 5), decay = c(0.1, 0.01)))
-
-# 3. SVM (Destek Vektör Makineleri) Eğitimi
-set.seed(123)
-svm_fit <- train(`100 seed weight` ~ ., data = train_scaled, 
-                 method = "svmRadial", 
-                 trControl = ctrl, 
-                 tuneLength = 10)
-
-# 4. Test Seti Üzerinde Tahminler
-ann_pred <- predict(ann_fit, test_scaled)
-svm_pred <- predict(svm_fit, test_scaled)
-
-# 5. Performans Karşılaştırma
-ann_rmse <- sqrt(mean((test_scaled$`100 seed weight` - ann_pred)^2))
-ann_r2   <- cor(test_scaled$`100 seed weight`, ann_pred)^2
-
-svm_rmse <- sqrt(mean((test_scaled$`100 seed weight` - svm_pred)^2))
-svm_r2   <- cor(test_scaled$`100 seed weight`, svm_pred)^2
-
-# Sonuç Tablosu
-performance_results <- data.frame(
-  Model = c("YSA (ANN)", "DVM (SVM)"),
-  RMSE = c(ann_rmse, svm_rmse),
-  R_Squared = c(ann_r2, svm_r2)
-)
-
-print(performance_results)
-
-```{r advanced_ml_tuning}
-library(caret)
-library(xgboost)
-library(plyr) # LightGBM entegrasyonu için gerekebilir
-
-# 1. Eğitim Kontrolü (10-katlı Çapraz Doğrulama)
-fitControl <- trainControl(method = "cv", number = 10, search = "grid")
-
-# 2. XGBoost Tuning Grid
-xgb_grid <- expand.grid(
-  nrounds = c(100, 200),
-  max_depth = c(3, 6, 9),
-  eta = c(0.01, 0.1, 0.3),
-  gamma = 0,
-  colsample_bytree = 1,
-  min_child_weight = 1,
-  subsample = 1
-)
-
-# 3. Modelleri Eğitme
-set.seed(123)
-
-# XGBoost
-model_xgb <- train(`100 seed weight` ~ ., data = train_scaled, 
-                   method = "xgbTree", 
-                   trControl = fitControl, 
-                   tuneGrid = xgb_grid, 
-                   verbose = FALSE)
-
-# LightGBM (Bazı sistemlerde 'lightgbm' paketi yüklü olmalıdır)
-# Not: Eğer hata alırsan 'gbm' modelini de alternatif olarak kullanabiliriz.
-model_lgbm <- train(`100 seed weight` ~ ., data = train_scaled, 
-                    method = "gbm", # Caret içinde standart gbm genellikle lgbm'e çok yakın sonuç verir
-                    trControl = fitControl, 
-                    verbose = FALSE)
-
-# Random Forest
-model_rf <- train(`100 seed weight` ~ ., data = train_scaled, 
-                  method = "rf", 
-                  trControl = fitControl, 
-                  ntree = 500)
-
-cat("Gelişmiş modeller optimize edilerek eğitildi!\n")
-
-```{r train_lgbm_direct}
-library(lightgbm)
-
-# Veriyi LightGBM formatına çeviriyoruz
-train_matrix <- as.matrix(train_scaled %>% select(-`100 seed weight`))
-train_label <- train_scaled$`100 seed weight`
-test_matrix <- as.matrix(test_scaled %>% select(-`100 seed weight`))
-test_label <- test_scaled$`100 seed weight`
-
-dtrain <- lgb.Dataset(data = train_matrix, label = train_label)
-
-# Hiperparametreler (Hakemlere sunacağımız optimize edilmiş değerler)
-params <- list(
-  objective = "regression",
-  metric = "rmse",
-  learning_rate = 0.05,
-  num_leaves = 31,
-  feature_fraction = 0.8,
-  bagging_fraction = 0.8,
-  bagging_freq = 5,
-  force_col_wise = TRUE
-)
-
-# Modeli Eğitme
-set.seed(123)
-lgbm_model <- lgb.train(
-  params = params,
-  data = dtrain,
-  nrounds = 500,
-  valids = list(test = lgb.Dataset(test_matrix, label = test_label)),
-  early_stopping_rounds = 10,
-  verbose = -1
-)
-
-# Test Seti Tahminleri
-lgbm_pred <- predict(lgbm_model, test_matrix)
-
-
-
-
-
-
-### 3. Güncellenmiş Karşılaştırma Tablosu (Tüm Modeller)
-
-Şimdi LightGBM sonuçlarını da diğerlerinin yanına ekleyelim:
-
-```rmd
-```{r final_performance_table}
-# LightGBM Metrikleri
-lgbm_rmse <- sqrt(mean((test_label - lgbm_pred)^2))
-lgbm_r2 <- cor(test_label, lgbm_pred)^2
-lgbm_mae <- mean(abs(test_label - lgbm_pred))
-lgbm_mape <- mean(abs((test_label - lgbm_pred) / test_label)) * 100
-
-# Eski tabloyu güncelle
-new_row <- data.frame(Model = "LightGBM", RMSE = lgbm_rmse, R2 = lgbm_r2, MAE = lgbm_mae, MAPE = lgbm_mape)
-final_comparison_all <- rbind(comparison_table_final, new_row)
-
-print(final_comparison_all)
-
-
-```{r taylor_diagram}
+# --- Stage 5: Taylor Diagram ---
 library(plotrix)
 
-# Gerçek değerler ve tahminleri içeren bir liste (Örnek olarak ANN ve RF)
-# Not: Diğer modelleri de ekleyebilirsiniz
-taylor.diagram(test_scaled$`100 seed weight`, ann_pred, col="red", pch=19, pos.cor=TRUE)
-taylor.diagram(test_scaled$`100 seed weight`, predict(model_rf, test_scaled), add=TRUE, col="blue", pch=18)
-# Grafik üzerine açıklama ekle
-l_text <- c("ANN", "RF")
-legend("topright", legend=l_text, col=c("red", "blue"), pch=c(19, 18))
+
+preds_list <- list(
+  SVM = predict(model_svm, test_scaled),
+  ANN = predict(model_ann, test_scaled),
+  RF = predict(model_rf, test_scaled),
+  XGB = predict(model_xgb, test_scaled),
+  GBM = predict(model_gbm, test_scaled)
+)
+
+
+taylor.diagram(test_scaled$x100_seed_weight, preds_list$SVM, col="red", pch=19, main="Taylor Diagram of Bean Seed Weight Prediction")
+taylor.diagram(test_scaled$x100_seed_weight, preds_list$ANN, add=TRUE, col="blue", pch=19)
+taylor.diagram(test_scaled$x100_seed_weight, preds_list$RF, add=TRUE, col="green", pch=19)
+taylor.diagram(test_scaled$x100_seed_weight, preds_list$XGB, add=TRUE, col="orange", pch=19)
+
+legend("topright", legend=names(preds_list[1:4]), fill=c("red", "blue", "green", "orange"))
+
+# --- Stage 6: Bootstrap Analysis (Stability Check) ---
+library(boot)
+
+
+rsq_function <- function(formula, data, indices) {
+  d <- data[indices,] # Örneklem seçimi
+  fit <- lm(formula, data=d)
+  return(summary(fit)$r.square)
+}
+
+
+boot_results <- boot(data = test_scaled, statistic = rsq_function, 
+                     R = 1000, formula = x100_seed_weight ~ .)
+
+
+plot(boot_results)
+boot_ci <- boot.ci(boot_results, type="perc")
+print(boot_ci) 
+
+
+# --- Stage 7: AMMI / Biplot Analysis ---
+if (!require("agricolae")) install.packages("agricolae"); library(agricolae)
 
 
 
-```{r importance_analysis}
-# 1. Random Forest Değişken Önemi
-rf_imp <- varImp(model_rf, scale = TRUE) # 0-100 arasına normalize e
+
+ammi_model <- with(fas5_cleaned, AMMI(Genotype, x100_seed_weight, Bract_size, Seed_length)) 
+
+
+
+plot(ammi_model, 0, 1, g_labels = "none") # PC1 vs Yield (Weight)
+abline(h = 0, v = 0, lty = 2)
+
+
+# --- Stage 8: XAI & Decision Support (SHAP & Waterfall) ---
+if (!require("DALEX")) install.packages("DALEX"); library(DALEX)
+if (!require("iBreakDown")) install.packages("iBreakDown"); library(iBreakDown)
+
+
+explainer_svm <- explain(
+  model = model_svm,
+  data = train_scaled[, -which(names(train_scaled) == "x100_seed_weight")],
+  y = train_scaled$x100_seed_weight,
+  label = "SVM Model"
+)
+# --- Stage 9: Feature Importance (SVM) ---
+library(caret)
+library(ggplot2)
+
+
+importance_svm <- varImp(model_svm, scale = FALSE)
+
+
+importance_df <- as.data.frame(importance_svm$importance)
+importance_df$Feature <- rownames(importance_df)
+
+ggplot(importance_df, aes(x = reorder(Feature, Overall), y = Overall)) +
+  geom_bar(stat = "identity", fill = "darkcyan") +
+  coord_flip() +
+  labs(title = "Feature Importance: Morphological Drivers of Seed Weight",
+       x = "Morphological Traits", y = "Importance Score") +
+  theme_minimal()
+
+
+# --- Stage 5: Partial Dependence Plots (PDP) ---
+if (!require("pdp")) install.packages("pdp"); library(pdp)
+
+
+pdp_length <- partial(model_svm, pred.var = "Seed_length", plot = TRUE, rug = TRUE, 
+                      plot.engine = "ggplot2") + ggtitle("PDP: Effect of Seed Length")
+
+pdp_width <- partial(model_svm, pred.var = "Seed_width", plot = TRUE, rug = TRUE, 
+                     plot.engine = "ggplot2") + ggtitle("PDP: Effect of Seed Width")
+
+library(gridExtra)
+grid.arrange(pdp_length, pdp_width, ncol = 2)
+
+prediction_breakdown <- predict_parts(
+  explainer = explainer_svm,
+  new_observation = test_scaled[5, ],
+  type = "break_down"
+)
+# --- Stage 10: Waterfall Analysis (XAI) ---
+library(DALEX)
+library(iBreakDown)
+
+
+svm_exp <- explain(
+  model = model_svm,
+  data = train_scaled[, -which(names(train_scaled) == "x100_seed_weight")],
+  y = train_scaled$x100_seed_weight,
+  label = "SVM Decision Support"
+)
+
+
+prediction_breakdown <- predict_parts(
+  explainer = svm_exp, 
+  new_observation = test_scaled[5, ], 
+  type = "break_down"
+)
+
+
+plot(prediction_breakdown) + 
+  ggtitle("Waterfall Plot
+)
+
+plot(prediction_breakdown) + ggtitle("Waterfall Analysis: genotype ID 5")
+
+
