@@ -4,635 +4,142 @@ date: "2026-01-17"
 output:
   pdf_document: default
   html_document: default
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+# --- Stage 1: Data Loading & Pre-processing ---
 
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
-
-
-
-```{r}
-# Kodlarını buraya yazmalısın
-library(readxl)
-fas3 <- read_excel("fas3.xlsx")
-head(fas3)
-```
-
-cor_matrix <- cor(fas3, use = "complete.obs")
-
-
-
-# Plotting the heatmap
-# This helps us visually identify redundant features
-corrplot(cor_matrix, 
-         method = "color", 
-         type = "upper", 
-         order = "hclust", # Groups similar variables
-         addCoef.col = "black", 
-         number.cex = 0.7,
-         tl.col = "black", 
-         title = "Correlation Matrix of Morphological Traits",
-         mar = c(0,0,1,0))
-         
-         
-         
-         
-         
-         install.packages("corrplot")
-
-
-library(corrplot)
-
-
-
-# Correlation matrix calculation
-cor_matrix <- cor(fas3, use = "complete.obs")
-
-# Plotting
-corrplot(cor_matrix, 
-         method = "color", 
-         type = "upper", 
-         order = "hclust", 
-         addCoef.col = "black", 
-         number.cex = 0.7,
-         tl.col = "black", 
-         title = "Correlation Matrix of Morphological Traits",
-         mar = c(0,0,1,0))
-         
-         
-    cor_matrix     
-    
-    
-    
-    
-    # Target variable is likely the last one or 'Yield'
-# Replace 'Yield' with your target column name if it is different
-target_name <- "Yield" 
-
-# Building a temporary linear model to calculate VIF
-vif_model <- lm(as.formula(paste("`", target_name, "` ~ .", sep="")), data = fas3)
-
-# Calculating VIF
-library(car)
-vif_results <- vif(vif_model)
-
-# Printing results
-print("VIF Values (Values > 10 indicate high multicollinearity):")
-print(vif_results)
-
-# Let's see which ones are problematic
-problematic_vars <- vif_results[vif_results > 10]
-print("Variables to consider dropping:")
-print(problematic_vars)
-         
-         
-# 1. VIF Analysis
-# Target: 100 seed weight
-formula_vif <- as.formula("`100 seed weight` ~ .")
-model_vif <- lm(formula_vif, data = fas3)
-
-# Calculate VIF
-library(car)
-vif_values <- vif(model_vif)
-print("VIF Results (Values > 10 indicate high multicollinearity):")
-print(sort(vif_values, decreasing = TRUE))
-
-# 2. Cook's Distance (Outlier Detection)
-# We use the same model to see which samples are outliers
-cooksd <- cooks.distance(model_vif)
-
-# Plotting with a threshold line
-plot(cooksd, pch="*", cex=2, main="Influential Samples by Cook's Distance", col="darkgreen")
-abline(h = 4/nrow(fas3), col="red", lty=2)
-
-# Identify rows to remove
-outlier_indices <- which(cooksd > (4/nrow(fas3)))
-cat("Number of outliers detected:", length(outlier_indices), "\n")
-cat("Row numbers of outliers:", outlier_indices, "\n")
-
-# 3. Final Cleaning
-# Removing outliers to get the ready-to-train dataset
-fas_ready <- fas3[-outlier_indices, ]
-
-
-```{r data_final_clean}
-# 1. Aykırı değerleri (12 genotip) siliyoruz
-# outlier_indices: 5 15 28 69 87 93 106 110 112 116 122 125
-fas_cleaned <- fas3[-c(5, 15, 28, 69, 87, 93, 106, 110, 112, 116, 122, 125), ]
-
-# 2. Çoklu doğrusallık yaratan değişkeni çıkarıyoruz
-# 'Number of internodes' eleniyor (Plant height ile %93 kor. olduğu için)
-fas_ready_for_scale <- fas_cleaned %>%
-  select(-`Number of internodes`)
-
-# Veri setinin yeni boyutunu kontrol edelim
-cat("Remaining observations:", nrow(fas_ready_for_scale), "\n")
-cat("Remaining predictors:", ncol(fas_ready_for_scale) - 1, "\n")
-
-
-
-
-
-
-
-
-
-
-
-
-
-# outlier_indices: 5 15 28 69 87 93 106 110 112 116 122 125
-fas_cleaned <- fas3[-c(5, 15, 28, 69, 87, 93, 106, 110, 112, 116, 122, 125), ]
-
-# 2. Çoklu doğrusallık yaratan değişkeni çıkarıyoruz
-# 'Number of internodes' eleniyor (Plant height ile %93 kor. olduğu için)
-fas_ready_for_scale <- fas_cleaned %>%
-  select(-`Number of internodes`)
-
-# Veri setinin yeni boyutunu kontrol edelim
-cat("Remaining observations:", nrow(fas_ready_for_scale), "\n")
-cat("Remaining predictors:", ncol(fas_ready_for_scale) - 1, "\n")
-
-
-
-
-
-```{r data_final_clean}
-# 1. Aykırı değerleri (12 genotip) siliyoruz
-# outlier_indices: 5 15 28 69 87 93 106 110 112 116 122 125
-fas_cleaned <- fas3[-c(5, 15, 28, 69, 87, 93, 106, 110, 112, 116, 122, 125), ]
-
-# 2. Çoklu doğrusallık yaratan değişkeni çıkarıyoruz
-# 'Number of internodes' eleniyor (Plant height ile %93 kor. olduğu için)
-fas_ready_for_scale <- fas_cleaned %>%
-  select(-`Number of internodes`)
-
-# Veri setinin yeni boyutunu kontrol edelim
-cat("Remaining observations:", nrow(fas_ready_for_scale), "\n")
-cat("Remaining predictors:", ncol(fas_ready_for_scale) - 1, "\n")
-
-
-# 1. Veriyi Bölme (%80 Train, %20 Test)
-set.seed(42) 
-index <- createDataPartition(fas_ready_for_scale$`100 seed weight`, p = 0.8, list = FALSE)
-
-train_data <- fas_ready_for_scale[index, ]
-test_data  <- fas_ready_for_scale[-index, ]
-
-# 2. Normalizasyon (Scaling)
-# Sadece eğitim verisi üzerinden parametreleri (ortalamayı ve sapmayı) hesaplıyoruz
-# Bu, "data leakage" (bilgi sızıntısı) engellemek için akademik bir zorunluluktur.
-params <- preProcess(train_data, method = c("center", "scale"))
-
-# Hesaplanan parametreleri her iki sete de uyguluyoruz
-train_scaled <- predict(params, train_data)
-test_scaled  <- predict(params, test_data)
-
-cat("Hazırlık Tamam!\n")
-cat("Eğitim seti:", nrow(train_scaled), "satır\n")
-cat("Test seti:", nrow(test_scaled), "satır\n")
-
-```{r final_modeling_and_comparison}
-library(caret)
-
-# 1. Kontrol Ayarları (10-katlı Çapraz Doğrulama)
-ctrl <- trainControl(method = "cv", number = 10)
-
-# 2. ANN (Yapay Sinir Ağları) Eğitimi
-set.seed(123)
-ann_fit <- train(`100 seed weight` ~ ., data = train_scaled, 
-                 method = "nnet", 
-                 linout = TRUE, 
-                 trace = FALSE, 
-                 trControl = ctrl,
-                 tuneGrid = expand.grid(size = c(1, 3, 5), decay = c(0.1, 0.01)))
-
-# 3. SVM (Destek Vektör Makineleri) Eğitimi
-set.seed(123)
-svm_fit <- train(`100 seed weight` ~ ., data = train_scaled, 
-                 method = "svmRadial", 
-                 trControl = ctrl, 
-                 tuneLength = 10)
-
-# 4. Test Seti Üzerinde Tahminler
-ann_pred <- predict(ann_fit, test_scaled)
-svm_pred <- predict(svm_fit, test_scaled)
-
-# 5. Performans Karşılaştırma
-ann_rmse <- sqrt(mean((test_scaled$`100 seed weight` - ann_pred)^2))
-ann_r2   <- cor(test_scaled$`100 seed weight`, ann_pred)^2
-
-svm_rmse <- sqrt(mean((test_scaled$`100 seed weight` - svm_pred)^2))
-svm_r2   <- cor(test_scaled$`100 seed weight`, svm_pred)^2
-
-# Sonuç Tablosu
-performance_results <- data.frame(
-  Model = c("YSA (ANN)", "DVM (SVM)"),
-  RMSE = c(ann_rmse, svm_rmse),
-  R_Squared = c(ann_r2, svm_r2)
-)
-
-print(performance_results)
-
-```{r advanced_ml_tuning}
-library(caret)
-library(xgboost)
-library(plyr) # LightGBM entegrasyonu için gerekebilir
-
-# 1. Eğitim Kontrolü (10-katlı Çapraz Doğrulama)
-fitControl <- trainControl(method = "cv", number = 10, search = "grid")
-
-# 2. XGBoost Tuning Grid
-xgb_grid <- expand.grid(
-  nrounds = c(100, 200),
-  max_depth = c(3, 6, 9),
-  eta = c(0.01, 0.1, 0.3),
-  gamma = 0,
-  colsample_bytree = 1,
-  min_child_weight = 1,
-  subsample = 1
-)
-
-# 3. Modelleri Eğitme
-set.seed(123)
-
-# XGBoost
-model_xgb <- train(`100 seed weight` ~ ., data = train_scaled, 
-                   method = "xgbTree", 
-                   trControl = fitControl, 
-                   tuneGrid = xgb_grid, 
-                   verbose = FALSE)
-
-# LightGBM (Bazı sistemlerde 'lightgbm' paketi yüklü olmalıdır)
-# Not: Eğer hata alırsan 'gbm' modelini de alternatif olarak kullanabiliriz.
-model_lgbm <- train(`100 seed weight` ~ ., data = train_scaled, 
-                    method = "gbm", # Caret içinde standart gbm genellikle lgbm'e çok yakın sonuç verir
-                    trControl = fitControl, 
-                    verbose = FALSE)
-
-# Random Forest
-model_rf <- train(`100 seed weight` ~ ., data = train_scaled, 
-                  method = "rf", 
-                  trControl = fitControl, 
-                  ntree = 500)
-
-cat("Gelişmiş modeller optimize edilerek eğitildi!\n")
-
-```{r train_lgbm_direct}
-library(lightgbm)
-
-# Veriyi LightGBM formatına çeviriyoruz
-train_matrix <- as.matrix(train_scaled %>% select(-`100 seed weight`))
-train_label <- train_scaled$`100 seed weight`
-test_matrix <- as.matrix(test_scaled %>% select(-`100 seed weight`))
-test_label <- test_scaled$`100 seed weight`
-
-dtrain <- lgb.Dataset(data = train_matrix, label = train_label)
-
-# Hiperparametreler (Hakemlere sunacağımız optimize edilmiş değerler)
-params <- list(
-  objective = "regression",
-  metric = "rmse",
-  learning_rate = 0.05,
-  num_leaves = 31,
-  feature_fraction = 0.8,
-  bagging_fraction = 0.8,
-  bagging_freq = 5,
-  force_col_wise = TRUE
-)
-
-# Modeli Eğitme
-set.seed(123)
-lgbm_model <- lgb.train(
-  params = params,
-  data = dtrain,
-  nrounds = 500,
-  valids = list(test = lgb.Dataset(test_matrix, label = test_label)),
-  early_stopping_rounds = 10,
-  verbose = -1
-)
-
-# Test Seti Tahminleri
-lgbm_pred <- predict(lgbm_model, test_matrix)
-
-
-
-
-
-
-### 3. Güncellenmiş Karşılaştırma Tablosu (Tüm Modeller)
-
-Şimdi LightGBM sonuçlarını da diğerlerinin yanına ekleyelim:
-
-```rmd
-```{r final_performance_table}
-# LightGBM Metrikleri
-lgbm_rmse <- sqrt(mean((test_label - lgbm_pred)^2))
-lgbm_r2 <- cor(test_label, lgbm_pred)^2
-lgbm_mae <- mean(abs(test_label - lgbm_pred))
-lgbm_mape <- mean(abs((test_label - lgbm_pred) / test_label)) * 100
-
-# Eski tabloyu güncelle
-new_row <- data.frame(Model = "LightGBM", RMSE = lgbm_rmse, R2 = lgbm_r2, MAE = lgbm_mae, MAPE = lgbm_mape)
-final_comparison_all <- rbind(comparison_table_final, new_row)
-
-print(final_comparison_all)
-
-
-```{r taylor_diagram}
-library(plotrix)
-
-# Gerçek değerler ve tahminleri içeren bir liste (Örnek olarak ANN ve RF)
-# Not: Diğer modelleri de ekleyebilirsiniz
-taylor.diagram(test_scaled$`100 seed weight`, ann_pred, col="red", pch=19, pos.cor=TRUE)
-taylor.diagram(test_scaled$`100 seed weight`, predict(model_rf, test_scaled), add=TRUE, col="blue", pch=18)
-# Grafik üzerine açıklama ekle
-l_text <- c("ANN", "RF")
-legend("topright", legend=l_text, col=c("red", "blue"), pch=c(19, 18))
-
-
-
-```{r importance_analysis}
-# 1. Random Forest Değişken Önemi
-rf_imp <- varImp(model_rf, scale = TRUE) # 0-100 arasına normalize eder
-
-# 2. ANN Değişken Önemi (Garson Algoritması ile)
-library(NeuralNetTools)
-ann_imp <- garson(ann_fit$finalModel, bar_plot = FALSE)
-
-# Görselleştirme
-plot(rf_imp, top = 10, main = "Random Forest - Top 10 Predictors")
-
-
-
-
-
-
-
-
-
-```{r final_publication_ready_figure}
-library(ggplot2)
-library(patchwork)
+# Load necessary libraries
+library(readr)
 library(dplyr)
+library(car)      # For VIF
+library(caret)    # For Data Splitting and Normalization
 
-# --- 1. Veri Hazırlığı (Sadece ilk 4 değişken) ---
-ann_top4 <- ann_data %>% arrange(desc(rel_imp)) %>% head(4)
-rf_top4  <- rf_imp_data %>% arrange(desc(Overall)) %>% head(4)
-svm_top4 <- svm_top4 %>% arrange(desc(Overall)) %>% head(4)
+# 1.1. Load Dataset (fas3.xlsx - Sayfa1.csv)
+raw_data <- read_csv("fas3.xlsx - Sayfa1.csv")
 
-# --- 2. Ortak Tema ---
-theme_q1_final <- theme_minimal(base_size = 14) +
-  theme(
-    axis.text.y = element_text(face = "bold", color = "black"),
-    plot.title = element_text(face = "plain", size = 12, hjust = 0.5),
-    panel.grid.minor = element_blank(),
-    plot.margin = margin(10, 20, 10, 10)
-  )
-
-# --- 3. Grafikler ---
-p1 <- ggplot(ann_top4, aes(x = reorder(Feature, rel_imp), y = rel_imp)) +
-  geom_bar(stat = "identity", fill = "#3498db", width = 0.6) +
-  coord_flip() +
-  labs(title = "ANN (Garson's)", x = "Morphological Traits", y = "Relative Importance") +
-  theme_q1_final
-
-p2 <- ggplot(rf_top4, aes(x = reorder(Feature, Overall), y = Overall)) +
-  geom_bar(stat = "identity", fill = "#27ae60", width = 0.6) +
-  coord_flip() +
-  labs(title = "Random Forest", x = "", y = "Importance Score") +
-  theme_q1_final
-
-p3 <- ggplot(svm_top4, aes(x = reorder(Feature, Overall), y = Overall)) +
-  geom_bar(stat = "identity", fill = "#e74c3c", width = 0.6) +
-  coord_flip() +
-  labs(title = "SVM (Ranked)", x = "", y = "Importance Score") +
-  theme_q1_final
-
-# --- 4. Başlık ve Etiketleme (Patchwork) ---
-final_header_fig <- (p1 | p2 | p3) + 
-  plot_annotation(
-    title = "Comparative Variable Importance for 100-Seed Weight Prediction",
-    subtitle = "Top 4 Morphological Predictors Identified by Machine Learning Models",
-    tag_levels = 'A', # A, B, C etiketleri ekler
-    theme = theme(
-      plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-      plot.subtitle = element_text(size = 14, hjust = 0.5, margin = margin(b = 20))
-    )
-  )
-
-# --- 5. Kaydetme ---
-ggsave("Final_Importance_with_Header.tiff", final_header_fig, 
-       width = 38, height = 12, units = "cm", dpi = 600, compression = "lzw")
-
-# Ekranda göster
-final_header_fig
-
-
-
-```{r xai_complete_final}
-library(readxl)
-library(caret)
-library(iml)
-library(ggplot2)
-library(patchwork)
-
-# 1. Veriyi yükle
-fas4 <- read_excel("fas4.xlsx")
-
-# 2. Eğitim Seti (Hedef: x100_seed_weight)
-set.seed(42)
-index <- createDataPartition(fas4$x100_seed_weight, p = 0.8, list = FALSE)
-train_set <- fas4[index, ]
-
-# 3. ANN Modeli Eğitimi
-# x harfi ve alt çizgiler sayesinde tertemiz bir formül:
-ann_fit <- train(x100_seed_weight ~ ., 
-                 data = train_set, 
-                 method = "nnet", 
-                 trControl = trainControl(method="cv", number=10), 
-                 linout = TRUE, trace = FALSE)
-
-# 4. XAI Hazırlığı (Predictor Nesnesi)
-X <- train_set[, names(train_set) != "x100_seed_weight"]
-predictor <- Predictor$new(model = ann_fit, data = X, y = train_set$x100_seed_weight)
-
-# 5. Kısmi Bağımlılık Grafikleri (PDP)
-# NOT: Excel'deki isimlerin tam olarak aynısını (Büyük/Küçük harf) kullanıyoruz
-p1 <- FeatureEffect$new(predictor, feature = "Seed_length", method = "pdp")$plot() + 
-      labs(title="Seed Length Influence", y="Weight Prediction") + theme_minimal()
-
-p2 <- FeatureEffect$new(predictor, feature = "Seed_width", method = "pdp")$plot() + 
-      labs(title="Seed Width Influence", y="Weight Prediction") + theme_minimal()
-
-p3 <- FeatureEffect$new(predictor, feature = "Seed_height", method = "pdp")$plot() + 
-      labs(title="Seed Height Influence", y="Weight Prediction") + theme_minimal()
-
-p4 <- FeatureEffect$new(predictor, feature = "Pod_width", method = "pdp")$plot() + 
-      labs(title="Pod Width Influence", y="Weight Prediction") + theme_minimal()
-
-# Grafikleri birleştir (2x2 Panel)
-xai_panel <- (p1 + p2) / (p3 + p4)
-xai_panel
-
-
-
-
-```{r shap_analysis_fixed}
-library(kernelshap)
-library(shapviz)
-library(ggplot2)
-
-# 1. Tahmin fonksiyonunu modele özel tanımlayalım (Hata almamak için şart)
-p_fun <- function(model, newdata) {
-  predict(model, newdata)
-}
-
-# 2. SHAP değerlerini hesapla (Arka planda Kernel SHAP kullanır)
-# X: Tahmin ediciler (Hedef değişken hariç)
-X_features <- train_set[, -which(names(train_set) == "x100_seed_weight")]
-
-# Not: İşlem süresini kısaltmak için küçük bir örneklem (background) üzerinden gidelim
-set.seed(42)
-shp_values <- kernelshap(ann_fit, X = X_features, pred_fun = p_fun, bg_X = X_features[sample(nrow(X_features), 20), ])
-
-# 3. Görselleştirme objesine dönüştür
-shp_viz <- shapviz(shp_values)
-
-# 4. Summary Plot (Beeswarm) - Karar Destek Sisteminin Temeli
-sv_importance(shp_viz, kind = "beeswarm") + 
-  theme_minimal() +
-  labs(title = "SHAP Global Explanations", 
-       subtitle = "Değişkenlerin Tane Ağırlığı Üzerindeki Pozitif/Negatif Etkisi")
-
-
-
-
-```{r shap_fast_waterfall_english}
-library(fastshap)
-library(ggplot2)
-
-# 1. Tahmin fonksiyonu
-p_fun <- function(object, newdata) {
-  predict(object, newdata)
-}
-
-# 2. SHAP değerleri
-set.seed(42)
-X_features <- train_set[, -which(names(train_set) == "x100_seed_weight")]
-ex_fast <- explain(ann_fit, X = X_features, pred_wrapper = p_fun, nsim = 20, adjust = TRUE)
-
-# 3. Manuel Waterfall Hazırlığı (En yüksek verimli genotip için)
-high_idx <- which.max(train_set$x100_seed_weight)
-case_study <- as.data.frame(ex_fast)[high_idx, ]
-case_study_long <- data.frame(
-  Feature = names(case_study),
-  Shap_Value = as.numeric(case_study)
+# 1.2. Translate Column Names to English (Consistency for GitHub)
+# The target variable (100 seed weight) is usually the last one
+colnames(raw_data) <- c(
+  "Terminal_leaflet_size", "Bract_size", "Flower_bud_length", 
+  "Flower_bud_width", "Peduncle_length", "Internodes_with_first_flower", 
+  "Flower_buds_in_cluster", "Pod_number_in_cluster", "Pod_length", 
+  "Pod_width", "Pod_flesh_thickness", "Length_of_beak", 
+  "Seed_number_in_pod", "Plant_height", "Number_of_internodes", 
+  "Seed_emergence_time", "Inflorescence_time", "Seed_length", 
+  "Seed_width", "Seed_height", "Hundred_seed_weight", "Harvest_time"
 )
 
-# 4. Grafik (İngilizce Terimlerle)
-ggplot(case_study_long, aes(x = reorder(Feature, Shap_Value), y = Shap_Value, fill = Shap_Value > 0)) +
-  geom_bar(stat = "identity") +
-  coord_flip() +
-  scale_fill_manual(values = c("#377EB8", "#E41A1C"), 
-                    labels = c("Decreasing Effect", "Increasing Effect")) +
-  theme_minimal() +
-  labs(title = paste("DSS Diagnostic Report: Genotype #", high_idx),
-       subtitle = "Individual feature contribution to the 100-seed weight prediction",
-       x = "Morphological Traits", 
-       y = "SHAP Contribution (Impact on Prediction)",
-       fill = "Influence Type") +
-  theme(legend.position = "bottom")
-library(DiagrammeR)
+# 1.3. Remove Variable with High Missing Data (per Article Section 2.1)
+# As per the article, 'first_pod_height' was removed. 
+# If it's already not in your 22 variables, we proceed.
+# Let's ensure the data is numeric
+data_clean <- raw_data %>% mutate(across(everything(), as.numeric))
 
-grViz("
-digraph circular_dss_flow {
-  # Genel Grafik Ayarları
-  graph [layout = dot, rankdir = TB, nodesep = 1.5, ranksep = 1.2, bgcolor = '#FDFDFD']
-  
-  # Devasa ve Renkli Düğüm Stilleri
-  node [fontname = 'Arial Black', 
-        shape = box, 
-        style = 'filled,bold', 
-        penwidth = 8, 
-        fontsize = 35, 
-        width = 5, 
-        height = 2.2,
-        fontcolor = '#2C3E50']
-  
-  # Bağlantı (Ok) Stilleri
-  edge [color = '#34495E', 
-        penwidth = 6, 
-        arrowsize = 3]
+# 1.4. Check for Outliers using Cook's Distance (per Article Section 2.2.2)
+# We use a simple linear model to calculate Cook's Distance
+lm_model <- lm(Hundred_seed_weight ~ ., data = data_clean)
+cooksd <- cooks.distance(lm_model)
 
-  # 1. Aşama: Veri (Mavi Tonları)
-  step1 [label = 'DATA\nACQUISITION', fillcolor = '#AED6F1', color = '#2E86C1']
-  step2 [label = 'PREPROCESSING\n(COOK & VIF)', fillcolor = '#AED6F1', color = '#2E86C1']
-  
-  # 2. Aşama: Modelleme (Yeşil Tonları)
-  step3 [label = 'DATA\nSPLITTING', fillcolor = '#ABEBC6', color = '#28B463']
-  step4 [label = 'MODEL\nTRAINING', fillcolor = '#ABEBC6', color = '#28B463']
-  step5 [label = 'Z-SCORE\nSCALING', fillcolor = '#ABEBC6', color = '#28B463']
-  
-  # 3. Aşama: Doğrulama (Sarı/Turuncu Tonları)
-  step6 [label = 'HYPERPARAMETER\nOPTIMIZATION', fillcolor = '#FAD7A0', color = '#D68910']
-  step7 [label = 'BONFERRONI\nADJUSTMENT', fillcolor = '#FAD7A0', color = '#D68910']
-  step8 [label = 'PERFORMANCE\nMETRICS', fillcolor = '#FAD7A0', color = '#D68910']
-  
-  # 4. Aşama: XAI (Mor Tonları)
-  step9 [label = 'SHAP (XAI)\nANALYSIS', fillcolor = '#D7BDE2', color = '#884EA0']
-  
-  # HEDEF: DSS (Kırmızı/Altın Vurgulu)
-  dss [label = 'DECISION SUPPORT\nSYSTEM (DSS)', 
-       fillcolor = '#F1948A', 
-       color = '#C0392B', 
-       shape = doubleoctagon, 
-       fontsize = 45, 
-       width = 7, 
-       height = 4,
-       fontcolor = '#7B241C']
+# Threshold: 4/n (per Article)
+n <- nrow(data_clean)
+outliers <- which(cooksd > (4/n))
+cat("Outliers detected at rows:", outliers)
 
-  # Çembersel Akışı Sağlayan Bağlantılar
-  # Üst Sıra
-  {rank = same; step1; step2; step3}
-  step1 -> step2 -> step3
-  
-  # Orta/Yan Akış
-  step3 -> step5 -> step4
-  step4 -> step6 -> step7
-  
-  # Alt Sıra
-  {rank = same; step7; step8; step9}
-  step7 -> step8 -> step9
-  
-  # Karar Destek Sistemine Büyük Geçiş
-  step9 -> dss [penwidth = 12, color = '#C0392B']
-  
-  # GERİ BESLEME DÖNGÜLERİ (Çemberselliği sağlar)
-  step8 -> step6 [label = '  OPTIMIZATION LOOP', style = dashed, constraint = false, fontcolor = '#D68910', fontsize = 25]
-  step9 -> step4 [label = '  FEATURE REFINEMENT', style = dashed, constraint = false, fontcolor = '#884EA0', fontsize = 25]
-  dss -> step1 [label = '  CONTINUOUS LEARNING', style = dotted, constraint = false, fontcolor = '#C0392B', fontsize = 25]
+# --- Stage 2: Multicollinearity (VIF) ---
 
-}
-")
+# 2.1. Calculate VIF for all variables (Scenario 1)
+vif_values <- vif(lm(Hundred_seed_weight ~ ., data = data_no_outliers))
+print(vif_values)
+
+# 2.2. Remove 'Number_of_internodes' due to high VIF (>10) [cite: 223, 247]
+# This results in the 21-variable dataset (fas5 logic)
+data_vif_optimized <- data_no_outliers %>% 
+  select(-Number_of_internodes)
+
+# Re-check VIF (Scenario 2)
+vif_values_final <- vif(lm(Hundred_seed_weight ~ ., data = data_vif_optimized))
+print(vif_values_final)
+
+
+# --- Stage 1: Data Cleaning (Removing Specific Outliers) ---
+
+# Packages check and load
+if (!require("dplyr")) install.packages("dplyr"); library(dplyr)
+if (!require("caret")) install.packages("caret"); library(caret)
+
+# 1.1. Load your manually prepared 'fas5' dataset
+# Assuming you loaded it as: fas5 <- read_csv("your_file.csv")
+# Note: Ensure Hundred_seed_weight is the target variable name
+
+# 1.2. Remove specific outlier genotypes provided by you
+outliers_to_remove <- c(5, 15, 28, 69, 87, 93, 106, 110, 112, 116, 122, 125)
+fas5_cleaned <- fas5[-outliers_to_remove, ]
+
+cat("Initial rows: 125 | Final rows after outlier removal:", nrow(fas5_cleaned), "\n")
+
+
+> set.seed(123)
+> # --- Cross-Validation Setup ---
+> train_ctrl <- trainControl(method = "cv", number = 10, savePredictions = "final")
+> 
+> # 1. SVM (Radial) - sigma: 0.001-0.1, C: 1-100
+> svm_grid <- expand.grid(sigma = c(0.001, 0.01, 0.1), C = c(1, 10, 50, 100))
+> model_svm <- train(x100_seed_weight ~ ., data = train_scaled, method = "svmRadial",
++                    trControl = train_ctrl, tuneGrid = svm_grid)
+> 
+> # 2. ANN (nnet) - size: 3-10, decay: 0.1-0.001
+> ann_grid <- expand.grid(size = seq(3, 10, by = 2), decay = c(0.1, 0.01, 0.001))
+> model_ann <- train(x100_seed_weight ~ ., data = train_scaled, method = "nnet",
++                    trControl = train_ctrl, tuneGrid = ann_grid, linout = TRUE, trace = FALSE)
+> 
+> # 3. Random Forest (RF) - mtry: 4, 8, 12, 16, ntree: 1000
+> rf_grid <- expand.grid(mtry = c(4, 8, 12, 16))
+> model_rf <- train(x100_seed_weight ~ ., data = train_scaled, method = "rf",
++                   trControl = train_ctrl, tuneGrid = rf_grid, ntree = 1000)
+> 
+> # 4. XGBoost - nrounds: 500-1000, depth: 4-8, eta: 0.01-0.05
+> xgb_grid <- expand.grid(nrounds = c(500, 1000), max_depth = c(4, 6, 8),
++                         eta = c(0.01, 0.05), gamma = 0, colsample_bytree = 0.8,
++                         min_child_weight = 1, subsample = 0.8)
+> model_xgb <- train(x100_seed_weight ~ ., data = train_scaled, method = "xgbTree",
++                    trControl = train_ctrl, tuneGrid = xgb_grid)
+
+> 
+> # 5. GBM - depth: 3-7, shrinkage: 0.01-0.05
+> gbm_grid <- expand.grid(interaction.depth = c(3, 5, 7), n.trees = c(100, 500),
++                         shrinkage = c(0.01, 0.05), n.minobsinnode = 10)
+> model_gbm <- train(x100_seed_weight ~ ., data = train_scaled, method = "gbm",
++                    trControl = train_ctrl, tuneGrid = gbm_grid, verbose = FALSE)
+> # 6. LightGBM - num_leaves: 15-31, learning_rate: 0.05
+> # Matris formatına hazırlık
+> dtrain_lgb <- lgb.Dataset(data = as.matrix(train_scaled[,-which(names(train_scaled)=="x100_seed_weight")]), 
++                           label = train_scaled$x100_seed_weight)
+> 
+> lgb_params <- list(objective = "regression", metric = "rmse", 
++                    learning_rate = 0.05, num_leaves = 31, min_data_in_leaf = 10)
+> 
+> model_lgbm <- lgb.train(params = lgb_params, data = dtrain_lgb, nrounds = 100, verbose = -1)
+> # Metrikleri hesaplayan fonksiyon
+> get_metrics <- function(model, test_data, target_col) {
++   preds <- predict(model, test_data)
++   actual <- test_data[[target_col]]
++   
++   r2 <- cor(actual, preds)^2
++   rmse <- sqrt(mean((actual - preds)^2))
++   mae <- mean(abs(actual - preds))
++   
++   return(c(R2 = r2, RMSE = rmse, MAE = mae))
++ }
+> 
+> # Modellerin Test Seti Performansı
+> results_table <- data.frame(
++   SVM = get_metrics(model_svm, test_scaled, "x100_seed_weight"),
++   ANN = get_metrics(model_ann, test_scaled, "x100_seed_weight"),
++   RF  = get_metrics(model_rf, test_scaled, "x100_seed_weight"),
++   XGB = get_metrics(model_xgb, test_scaled, "x100_seed_weight"),
++   GBM = get_metrics(model_gbm, test_scaled, "x100_seed_weight")
++ )
+> 
+> print(t(results_table))
+
+
+
